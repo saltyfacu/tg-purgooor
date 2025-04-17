@@ -1,5 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
 
-.env
-Pipfile
-Pipfile.*
+# Telethon session files
 *.session
+*.session-journal
+
+# Reports
+*.csv 
+
+# Environment files
+.env
+
+# VSCode settings (optional)
+.vscode/
+
+# macOS system files
+.DS_Store
+
+# Python virtual environment folders
+venv/
+env/
+*.egg-info/
