@@ -1,12 +1,12 @@
 import os
 import argparse
+import asyncio
 from dotenv import dotenv_values
 from telethon.sync import TelegramClient
 from telethon.tl.types import Channel, Chat
 from telethon.errors import FloodWaitError
-import asyncio
 
-# Load .env + environment overrides
+# Load config
 config = {
     **dotenv_values(".env"),
     **os.environ,
@@ -47,26 +47,39 @@ async def main(api_id, api_hash, prefix, match_mode, excludes, dry_run, session_
     excludes_set = set(name if case_sensitive else name.lower() for name in excludes)
     count = 0
 
-    async for dialog in client.iter_dialogs():
-        entity = dialog.entity
-        name = dialog.name or ""
-        compare_name = name if case_sensitive else name.lower()
+    offset_id = 0
+    offset_date = None
+    batch_limit = 20
 
-        if isinstance(entity, (Channel, Chat)) and dialog.is_group:
-            if matches(name, prefix, match_mode, case_sensitive) and compare_name not in excludes_set:
-                count += 1
-                if dry_run:
-                    print(f"[DRY RUN] Would leave group: {name}")
-                else:
-                    print(f"Leaving group: {name}")
-                    try:
-                        await client.delete_dialog(entity)
-                        await asyncio.sleep(2)  # Respectful delay to avoid rate limiting
-                    except FloodWaitError as e:
-                        print(f"⚠️ Flood wait triggered. Sleeping for {e.seconds} seconds...")
-                        await asyncio.sleep(e.seconds)
-                    except Exception as e:
-                        print(f"❌ Failed to leave {name}: {e}")
+    while True:
+        dialogs = await client.get_dialogs(limit=batch_limit, offset_date=offset_date, offset_id=offset_id)
+        if not dialogs:
+            break
+
+        for dialog in dialogs:
+            entity = dialog.entity
+            name = dialog.name or ""
+            compare_name = name if case_sensitive else name.lower()
+
+            if isinstance(entity, (Channel, Chat)) and dialog.is_group:
+                if matches(name, prefix, match_mode, case_sensitive) and compare_name not in excludes_set:
+                    count += 1
+                    if dry_run:
+                        print(f"[DRY RUN] Would leave group: {name}")
+                    else:
+                        print(f"Leaving group: {name}")
+                        try:
+                            await client.delete_dialog(entity)
+                            await asyncio.sleep(2)
+                        except FloodWaitError as e:
+                            print(f"Flood wait. Sleeping for {e.seconds} seconds...")
+                            await asyncio.sleep(e.seconds)
+                        except Exception as e:
+                            print(f"Failed to leave {name}: {e}")
+
+        last = dialogs[-1].message
+        offset_id = last.id
+        offset_date = last.date
 
     if count == 0:
         print("No matching groups found.")
