@@ -46,15 +46,19 @@ async def main(api_id, api_hash, prefix, match_mode, excludes, dry_run, session_
 
     excludes_set = set(name if case_sensitive else name.lower() for name in excludes)
     count = 0
+    scanned_dialogs = 0
+    scanned_groups = 0
 
     offset_id = 0
     offset_date = None
-    batch_limit = 20
+    batch_limit = 20  # tighter pagination
 
     while True:
         dialogs = await client.get_dialogs(limit=batch_limit, offset_date=offset_date, offset_id=offset_id)
         if not dialogs:
             break
+
+        scanned_dialogs += len(dialogs)
 
         for dialog in dialogs:
             entity = dialog.entity
@@ -62,6 +66,7 @@ async def main(api_id, api_hash, prefix, match_mode, excludes, dry_run, session_
             compare_name = name if case_sensitive else name.lower()
 
             if isinstance(entity, (Channel, Chat)) and dialog.is_group:
+                scanned_groups += 1
                 if matches(name, prefix, match_mode, case_sensitive) and compare_name not in excludes_set:
                     count += 1
                     if dry_run:
@@ -72,10 +77,12 @@ async def main(api_id, api_hash, prefix, match_mode, excludes, dry_run, session_
                             await client.delete_dialog(entity)
                             await asyncio.sleep(2)
                         except FloodWaitError as e:
-                            print(f"Flood wait. Sleeping for {e.seconds} seconds...")
+                            print(f"Flood wait triggered. Sleeping for {e.seconds} seconds...")
                             await asyncio.sleep(e.seconds)
                         except Exception as e:
                             print(f"Failed to leave {name}: {e}")
+
+        print(f"Scanned {scanned_dialogs} dialogs, checked {scanned_groups} groups so far...")
 
         last = dialogs[-1].message
         offset_id = last.id
